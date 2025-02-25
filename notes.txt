@@ -1,3 +1,86 @@
+If running the command:
+
+$JBOSS_HOME/bin/elytron-tool.sh vault --migrate
+
+results in an “Unrecognized option” error, the issue is likely due to one of the following reasons:
+	1.	Incorrect Command Syntax
+	•	JBoss EAP 8 does not support a direct vault --migrate option.
+	•	Vault migration should be handled manually by exporting vault data and creating a credential store.
+	•	Instead, try:
+
+$JBOSS_HOME/bin/elytron-tool.sh vault --help
+
+This will show available commands.
+
+	2.	Using an Older JBoss Version
+	•	Check your JBoss version:
+
+$JBOSS_HOME/bin/standalone.sh --version
+
+
+	•	Elytron migration tools are fully supported in JBoss EAP 8, but may not work properly in JBoss 7.4.
+
+	3.	Elytron Tool Requires Java 11+
+	•	If you are using JDK 8, it may not work.
+	•	Verify your Java version:
+
+java -version
+
+
+	•	If it’s not JDK 11 or JDK 17, update:
+
+export JAVA_HOME=/path/to/jdk17
+export PATH=$JAVA_HOME/bin:$PATH
+
+How to Manually Migrate Vault to Elytron Credential Store
+
+Since vault --migrate does not exist as a direct command, follow these steps:
+
+Step 1: Export Vault Data (JBoss EAP 7.4)
+
+Run:
+
+$JBOSS_HOME/bin/vault.sh --keystore vault.keystore --keystore-password <password> --alias vault
+
+Copy the necessary values from the output.
+
+Step 2: Create Elytron Credential Store (JBoss EAP 8)
+
+Run:
+
+$JBOSS_HOME/bin/elytron-tool.sh credential-store --create --location=credential-store.pfx --password=<newPassword>
+
+Step 3: Add Entries to Credential Store
+
+For each vault entry, add it to the credential store:
+
+$JBOSS_HOME/bin/elytron-tool.sh credential-store --add dbPassword --password=mySecurePassword --location=credential-store.pfx --password=<newPassword>
+
+Step 4: Update standalone.xml
+
+Replace:
+
+<vault>
+    <vault-option name="KEYSTORE_URL" value="${jboss.server.config.dir}/vault.keystore"/>
+</vault>
+
+With:
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <credential-store name="MyCredentialStore" location="credential-store.pfx" relative-to="jboss.server.config.dir" create="true"/>
+</subsystem>
+
+Next Steps
+	1.	Confirm JBoss EAP 8 is correctly installed.
+	2.	Run elytron-tool.sh --help to check available commands.
+	3.	Use manual migration steps if vault --migrate is not supported.
+
+If the error persists, let me know your JBoss version and the exact error message.
+
+===
+
+
+
 Upgrading JBoss EAP 7.4 running on JDK 8 to JBoss EAP 8 with JDK 17 requires careful planning, as JBoss EAP 8 introduces Jakarta EE 10 and requires JDK 11+ (in your case, JDK 17). Below is a step-by-step guide to perform the upgrade while considering vault and security realms.
 
 1. Pre-Upgrade Preparations
