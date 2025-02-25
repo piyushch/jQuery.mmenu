@@ -214,3 +214,332 @@ By rechecking the steps, the following items have been emphasized or added:
 	•	Final verification and a robust rollback plan before production deployment
 
 This comprehensive checklist should help ensure that no critical element is overlooked during the upgrade. Would you like further details on any specific section or guidance on using migration tools?
+
+
+
+
+==###
+
+Here’s an example of how standalone.xml changes when migrating from JBoss EAP 7.4 (Legacy Security, Vault, and Logging) to JBoss EAP 8 (Elytron Security, Credential Store, and Updated Logging).
+
+1. Security Realms Migration (Legacy → Elytron)
+
+Before Migration (JBoss EAP 7.4 - Legacy Security Realms)
+
+<management>
+    <security-realms>
+        <security-realm name="ManagementRealm">
+            <authentication>
+                <local default-user="$local" skip-group-loading="true"/>
+                <properties path="mgmt-users.properties" relative-to="jboss.server.config.dir"/>
+            </authentication>
+            <authorization map-groups-to-roles="false">
+                <properties path="mgmt-groups.properties" relative-to="jboss.server.config.dir"/>
+            </authorization>
+        </security-realm>
+    </security-realms>
+</management>
+
+After Migration (JBoss EAP 8 - Elytron Security)
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <filesystem-realm name="ManagementRealm" path="mgmt-users" relative-to="jboss.server.config.dir" />
+    
+    <security-domain name="ManagementDomain" default-realm="ManagementRealm" permission-mapper="default-permission-mapper">
+        <realm name="ManagementRealm"/>
+    </security-domain>
+    
+    <http-authentication-factory name="ManagementAuthFactory" http-server-mechanism-factory="global" security-domain="ManagementDomain">
+        <mechanism-configuration>
+            <mechanism mechanism-name="BASIC">
+                <mechanism-realm realm-name="ManagementRealm"/>
+            </mechanism>
+        </mechanism-configuration>
+    </http-authentication-factory>
+</subsystem>
+
+	•	Why change?
+	•	The old security-realms are replaced by Elytron security domains and realms.
+	•	Uses filesystem-realm instead of property files.
+	•	http-authentication-factory replaces legacy authentication.
+
+2. Vault Migration to Elytron Credential Store
+
+Before Migration (JBoss EAP 7.4 - Vault)
+
+<vault>
+    <vault-option name="KEYSTORE_URL" value="${jboss.server.config.dir}/vault.keystore"/>
+    <vault-option name="KEYSTORE_PASSWORD" value="ENC(ABC123...)"/>
+    <vault-option name="KEYSTORE_ALIAS" value="vault"/>
+    <vault-option name="SALT" value="1234abcd"/>
+    <vault-option name="ITERATION_COUNT" value="120"/>
+</vault>
+
+After Migration (JBoss EAP 8 - Elytron Credential Store)
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <credential-store name="MyCredentialStore" relative-to="jboss.server.config.dir" location="credential-store.pfx" create="true">
+        <clear-text>
+            <credential name="dbPassword" value="mySecurePassword"/>
+        </clear-text>
+    </credential-store>
+</subsystem>
+
+<subsystem xmlns="urn:wildfly:datasources:6.0">
+    <data-source jndi-name="java:/jdbc/MyDS" pool-name="MyDS">
+        <connection-url>jdbc:mysql://localhost:3306/mydb</connection-url>
+        <driver>mysql</driver>
+        <security>
+            <user-name>myUser</user-name>
+            <credential-reference store="MyCredentialStore" alias="dbPassword"/>
+        </security>
+    </data-source>
+</subsystem>
+
+	•	Why change?
+	•	Vault is deprecated, and Elytron Credential Store replaces it.
+	•	The credential-store is referenced in datasource security.
+	•	Sensitive values (dbPassword) are stored securely in the credential store instead of in the configuration file.
+
+3. Logging Migration
+
+Before Migration (JBoss EAP 7.4 - Legacy Logging Subsystem)
+
+<subsystem xmlns="urn:jboss:domain:logging:9.0">
+    <console-handler name="CONSOLE">
+        <level name="INFO"/>
+        <formatter>
+            <named-formatter name="COLOR-PATTERN"/>
+        </formatter>
+    </console-handler>
+
+    <periodic-rotating-file-handler name="FILE">
+        <formatter>
+            <named-formatter name="PATTERN"/>
+        </formatter>
+        <file relative-to="jboss.server.log.dir" path="server.log"/>
+        <suffix value=".yyyy-MM-dd"/>
+        <append value="true"/>
+    </periodic-rotating-file-handler>
+
+    <root-logger>
+        <level name="INFO"/>
+        <handlers>
+            <handler name="CONSOLE"/>
+            <handler name="FILE"/>
+        </handlers>
+    </root-logger>
+</subsystem>
+
+After Migration (JBoss EAP 8 - Updated Logging Subsystem)
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <formatter name="json">
+        <json-formatter />
+    </formatter>
+</subsystem>
+
+<subsystem xmlns="urn:jboss:domain:logging:10.0">
+    <console-handler name="CONSOLE">
+        <level name="INFO"/>
+        <formatter>
+            <named-formatter name="json"/>
+        </formatter>
+    </console-handler>
+
+    <file-handler name="FILE">
+        <formatter>
+            <named-formatter name="json"/>
+        </formatter>
+        <file relative-to="jboss.server.log.dir" path="server.log"/>
+    </file-handler>
+
+    <root-logger>
+        <level name="INFO"/>
+        <handlers>
+            <handler name="CONSOLE"/>
+            <handler name="FILE"/>
+        </handlers>
+    </root-logger>
+</subsystem>
+
+	•	Why change?
+	•	The logging subsystem now supports JSON log format for better integration with log aggregators (e.g., ELK, Splunk).
+	•	periodic-rotating-file-handler replaced with file-handler for better control over file-based logs.
+
+Summary of Changes
+
+Feature	JBoss EAP 7.4 (Before Migration)	JBoss EAP 8 (After Migration)
+Security Realms	security-realms (legacy)	elytron (modern security model)
+Vault	Legacy vault subsystem	credential-store in Elytron
+Logging	Console + rotating file	JSON logging, Elytron integration
+
+Additional Steps After Migration
+	1.	Verify Logs
+	•	Ensure that authentication logs and system logs appear correctly after migration.
+	•	Run:
+
+tail -f $JBOSS_HOME/standalone/log/server.log
+
+
+	2.	Test Authentication and Security
+	•	Validate that users can still log in and permissions work as expected.
+	3.	Test Database Connectivity
+	•	Ensure the credential store integration correctly retrieves secure passwords.
+
+This should help you transition your standalone.xml smoothly from JBoss EAP 7.4 to JBoss EAP 8. Do you need additional examples for other subsystems?
+
+
+
+##===
+When migrating from JBoss EAP 7.4 to JBoss EAP 8, several subsystem configurations must be updated due to the adoption of Jakarta EE 10, Elytron Security, and JDK 17 compatibility. Below are examples of key subsystem changes in standalone.xml.
+
+1. Security Subsystem Changes (Legacy to Elytron)
+	•	Affected Tags: <security-realms>, <security-domains>, <vault>, <authentication>
+	•	Reason: JBoss EAP 8 removes legacy security realms and vault in favor of Elytron.
+
+Before (JBoss EAP 7.4 - Legacy Security)
+
+<security-realms>
+    <security-realm name="ApplicationRealm">
+        <authentication>
+            <local default-user="$local" skip-group-loading="true"/>
+            <properties path="application-users.properties" relative-to="jboss.server.config.dir"/>
+        </authentication>
+        <authorization map-groups-to-roles="true">
+            <properties path="application-roles.properties" relative-to="jboss.server.config.dir"/>
+        </authorization>
+    </security-realm>
+</security-realms>
+
+After (JBoss EAP 8 - Elytron)
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <filesystem-realm name="ApplicationRealm" path="application-users" relative-to="jboss.server.config.dir"/>
+    
+    <security-domain name="ApplicationDomain" default-realm="ApplicationRealm" permission-mapper="default-permission-mapper">
+        <realm name="ApplicationRealm"/>
+    </security-domain>
+</subsystem>
+
+	•	Changes:
+	•	Legacy security realms removed, replaced with Elytron security domains.
+	•	Properties-based authentication is deprecated, replaced with filesystem-realm.
+	•	Role-based authentication is configured via Elytron.
+
+2. Datasource Subsystem Changes (JDBC Password Handling)
+	•	Affected Tags: <security>
+	•	Reason: Vault-based passwords are replaced with Credential Store (Elytron).
+
+Before (JBoss EAP 7.4 - Vault Security for JDBC)
+
+<data-source jndi-name="java:/jdbc/MyDS" pool-name="MyDS">
+    <connection-url>jdbc:mysql://localhost:3306/mydb</connection-url>
+    <driver>mysql</driver>
+    <security>
+        <user-name>dbuser</user-name>
+        <password>${VAULT::db::password}</password>
+    </security>
+</data-source>
+
+After (JBoss EAP 8 - Elytron Credential Store)
+
+<subsystem xmlns="urn:wildfly:elytron:12.0">
+    <credential-store name="MyCredentialStore" relative-to="jboss.server.config.dir" location="credential-store.pfx" create="true">
+        <clear-text>
+            <credential name="dbPassword" value="mypassword"/>
+        </clear-text>
+    </credential-store>
+</subsystem>
+
+<subsystem xmlns="urn:wildfly:datasources:6.0">
+    <data-source jndi-name="java:/jdbc/MyDS" pool-name="MyDS">
+        <connection-url>jdbc:mysql://localhost:3306/mydb</connection-url>
+        <driver>mysql</driver>
+        <security>
+            <user-name>dbuser</user-name>
+            <credential-reference store="MyCredentialStore" alias="dbPassword"/>
+        </security>
+    </data-source>
+</subsystem>
+
+	•	Changes:
+	•	Vault-based passwords (${VAULT::db::password}) are removed.
+	•	Use Elytron credential store for password management.
+
+3. Messaging Subsystem Changes (Artemis JMS)
+	•	Affected Tags: <messaging-activemq>
+	•	Reason: JBoss EAP 8 removes legacy HornetQ settings and upgrades to Artemis.
+
+Before (JBoss EAP 7.4 - Legacy HornetQ)
+
+<subsystem xmlns="urn:jboss:domain:messaging-activemq:7.0">
+    <server name="default">
+        <security-setting name="#">
+            <role name="guest" send="true" consume="true" create-non-durable-queue="true"/>
+        </security-setting>
+    </server>
+</subsystem>
+
+After (JBoss EAP 8 - Artemis)
+
+<subsystem xmlns="urn:wildfly:messaging-activemq:8.0">
+    <server name="default">
+        <security-setting name="#">
+            <role name="guest" send="true" consume="true" create-non-durable-queue="true" delete-non-durable-queue="true"/>
+        </security-setting>
+    </server>
+</subsystem>
+
+	•	Changes:
+	•	Updated xmlns from 7.0 to 8.0.
+	•	Added delete-non-durable-queue="true" to align with Artemis best practices.
+
+4. Logging Subsystem Changes
+	•	Affected Tags: <console-handler>, <file-handler>
+	•	Reason: Periodic rotating file handler is replaced with JSON formatting.
+
+Before (JBoss EAP 7.4 - Legacy Logging)
+
+<subsystem xmlns="urn:jboss:domain:logging:9.0">
+    <console-handler name="CONSOLE">
+        <level name="INFO"/>
+        <formatter>
+            <named-formatter name="COLOR-PATTERN"/>
+        </formatter>
+    </console-handler>
+</subsystem>
+
+After (JBoss EAP 8 - JSON Logging)
+
+<subsystem xmlns="urn:jboss:domain:logging:10.0">
+    <console-handler name="CONSOLE">
+        <level name="INFO"/>
+        <formatter>
+            <json-formatter/>
+        </formatter>
+    </console-handler>
+</subsystem>
+
+	•	Changes:
+	•	Moved to JSON-based logging for better log processing in ELK/Splunk.
+
+5. Deployment Scanner Changes
+	•	Affected Tags: <deployment-scanner>
+	•	Reason: The default deployment scanner configuration is changed.
+
+Before (JBoss EAP 7.4 - Deployment Scanner)
+
+<subsystem xmlns="urn:jboss:domain:deployment-scanner:2.0">
+    <deployment-scanner path="deployments" relative-to="jboss.server.base.dir" scan-interval="5000"/>
+</subsystem>
+
+After (JBoss EAP 8 - New Deployment Scanner Settings)
+
+<subsystem xmlns="urn:jboss:domain:deployment-scanner:3.0">
+    <deployment-scanner path="deployments" relative-to="jboss.server.base.dir" scan-interval="10000"/>
+</subsystem>
+
+	•	Changes:
+	•	scan-interval default increased
+
