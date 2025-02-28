@@ -1,3 +1,75 @@
+
+You’re right! The command /authentication=ldap:test-connection(name=LDAPRealm) does not exist in JBoss EAP 8. Instead, you can verify LDAP connectivity using other methods.
+
+✅ Alternative Ways to Test LDAP Connection in JBoss EAP 8
+
+🔹 Method 1: Enable Debug Logging for LDAP
+
+If JBoss fails to connect to LDAP, enabling debug logs will show detailed errors.
+
+Run this in JBoss CLI:
+
+/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)
+/subsystem=logging/logger=org.wildfly.security:add(level=DEBUG)
+reload
+
+Then, try logging in and check the logs:
+
+tail -f $JBOSS_HOME/standalone/log/server.log
+
+Look for:
+	•	Connection refused → Check LDAP URL, port, or firewall.
+	•	Authentication failed → Verify bind DN and password.
+	•	User not found → Check search-base-dn and rdn-identifier.
+
+🔹 Method 2: Verify LDAP Realm Configuration
+
+To ensure your LDAP realm is configured correctly, run:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)
+
+Check:
+	•	LDAP URL (url="ldap://<LDAP_SERVER>:389" or ldaps://<LDAP_SERVER>:636)
+	•	Base DN (search-base-dn="ou=users,dc=example,dc=com")
+	•	User search filter (rdn-identifier="uid")
+
+If incorrect, update the values:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:write-attribute(name=url, value="ldap://<LDAP_SERVER>:389")
+reload
+
+🔹 Method 3: Test LDAP Search Manually (Outside JBoss)
+
+Use the ldapsearch command to verify if JBoss can find the user:
+
+ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=users,dc=example,dc=com" "(uid=<LDAP_USERNAME>)"
+
+Expected output:
+✔ User details appear → LDAP search is working.
+❌ No results → Check search filters and Base DN.
+
+🔹 Method 4: Use JBoss Elytron Tool to Test LDAP
+
+Run the Elytron tool to validate LDAP connectivity:
+
+$JBOSS_HOME/bin/elytron-tool.sh ldap --url ldap://<LDAP_SERVER>:389 \
+ --bind-dn "cn=admin,dc=example,dc=com" --bind-credential <LDAP_PASSWORD> \
+ --search-dn "ou=users,dc=example,dc=com" --filter "(uid=<LDAP_USERNAME>)"
+
+If the test is successful, JBoss should be able to fetch the user.
+
+✅ Summary
+
+Step	Command	Purpose
+Enable Debug Logs	/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)	See detailed LDAP errors
+Check LDAP Config	/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)	Ensure correct Base DN, URL, and filter
+Test LDAP Search	ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=users,dc=example,dc=com" "(uid=<LDAP_USERNAME>)"	Verify if JBoss can find the user
+Use Elytron Tool	$JBOSS_HOME/bin/elytron-tool.sh ldap --url ldap://<LDAP_SERVER>:389 --bind-dn "cn=admin,dc=example,dc=com" --bind-credential <LDAP_PASSWORD> --search-dn "ou=users,dc=example,dc=com" --filter "(uid=<LDAP_USERNAME>)"	Directly test LDAP connection
+
+Try these steps and let me know what you find! 🚀
+
+
+
 To check if JBoss EAP 8 is able to connect to the LDAP server and fetch the user, follow these debugging steps:
 
 🔹 Step 1: Enable Debug Logs for LDAP Authentication
