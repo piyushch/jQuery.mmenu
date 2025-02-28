@@ -1,3 +1,108 @@
+
+To define group-based authorization in JBoss using LDAP groups, you can configure the principal-to-group section in your Elytron LDAP realm. This section defines how JBoss associates a user to a group, which can then be used for authorization purposes.
+
+🔹 Example Configuration of Group-Based Authorization
+
+This configuration will ensure that users are assigned to groups in JBoss based on the LDAP group membership.
+
+Here’s an example of how to configure it:
+
+1️⃣ Define principal-to-group for LDAP Realm
+
+<principal-to-group>
+    <group-search>
+        <!-- The LDAP attribute that contains the group name (e.g., 'cn' is commonly used) -->
+        <group-name>cn</group-name>  
+        
+        <!-- The LDAP attribute that contains the group DN (Distinguished Name) -->
+        <group-dn-attribute>dn</group-dn-attribute>  
+        
+        <!-- The LDAP attribute that is used to map the group name, typically 'cn' -->
+        <group-name-attribute>cn</group-name-attribute>
+        
+        <!-- Iterative search for all groups a user is part of -->
+        <iterative>true</iterative>  
+    </group-search>
+</principal-to-group>
+
+🔹 Explanation of Each Attribute:
+	•	group-name: This specifies the LDAP attribute that holds the group name. In LDAP, this is often cn (common name), but it could be something else depending on your directory.
+	•	Example: group-name="cn"
+	•	group-dn-attribute: This refers to the LDAP attribute that contains the Distinguished Name (DN) of the group entry. This attribute will typically be dn, but check your LDAP schema for the correct attribute.
+	•	Example: group-dn-attribute="dn"
+	•	group-name-attribute: This specifies the LDAP attribute to map to the group name. Usually, this is also cn, but it can be configured according to your LDAP structure.
+	•	Example: group-name-attribute="cn"
+	•	iterative: If true, JBoss will iterate through all groups the user belongs to and assign the corresponding roles for authorization. This allows the user to be associated with multiple roles based on group membership.
+	•	Example: iterative="true"
+
+2️⃣ Full Example of ldap-realm with Group Mapping
+
+This is how you would configure the entire LDAP realm, including the principal-to-group part:
+
+<subsystem xmlns="urn:wildfly:elytron:1.0">
+    <ldap-realm name="LDAPRealm" url="ldap://ldap-server:389" 
+                bind-dn="cn=admin,dc=example,dc=com" bind-credential="password" 
+                search-base-dn="ou=users,dc=example,dc=com" 
+                rdn-identifier="uid" principal-attribute="uid">
+        
+        <!-- Define group search and authorization -->
+        <principal-to-group>
+            <group-search>
+                <group-name>cn</group-name>
+                <group-dn-attribute>dn</group-dn-attribute>
+                <group-name-attribute>cn</group-name-attribute>
+                <iterative>true</iterative>
+            </group-search>
+        </principal-to-group>
+        
+    </ldap-realm>
+</subsystem>
+
+3️⃣ LDAP Entry Example
+
+If your LDAP entries are structured like this:
+
+dn: cn=Admins,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: Admins
+member: uid=john.doe,ou=users,dc=example,dc=com
+
+This means user john.doe is a member of the Admins group. When JBoss authenticates john.doe, it will check this group membership and assign the user to the Admins role for authorization.
+
+4️⃣ Verify Group-Based Authorization
+
+After configuring the principal-to-group mapping, verify that the user is assigned the correct group roles in the management console or through CLI commands.
+
+For example, to check the groups a user is assigned to:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)
+
+You should see the user listed under groups if they are successfully mapped to the correct group based on their LDAP attributes.
+
+5️⃣ Troubleshooting
+
+If the user doesn’t get the expected roles:
+	•	Check the logs for any errors related to LDAP group mapping. Enabling debug logging can be helpful:
+
+/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)
+reload
+
+
+	•	Ensure the LDAP query is correct, and check that group membership is configured as expected in your LDAP directory.
+	•	Use ldapsearch to verify group membership outside of JBoss:
+
+ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=groups,dc=example,dc=com" "(member=uid=john.doe,ou=users,dc=example,dc=com)"
+
+✅ Summary
+	•	principal-to-group: Maps users to groups for authorization in JBoss.
+	•	LDAP Configuration: Define group search parameters like group-name, group-dn-attribute, group-name-attribute, and iterative.
+	•	Check Logs: Enable debug logging to diagnose issues.
+
+Let me know if you need any further assistance! 🚀
+
+
+
+
 To define a new role mapper for LDAP in JBoss EAP 8 and add it to the Elytron configuration, follow these steps:
 
 🔹 Step 1: Define a Role Mapper for LDAP Groups
