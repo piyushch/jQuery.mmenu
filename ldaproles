@@ -1,4 +1,91 @@
 
+The attribute-mapping section in JBoss Elytron LDAP realm is used to map LDAP attributes to JBoss security attributes.
+
+🔹 Syntax of attribute-mapping
+
+A typical configuration looks like this:
+
+<attribute-mapping>
+    <attribute from="cn" to="commonName"/>
+    <attribute from="mail" to="email"/>
+    <attribute from="memberOf" to="groups"/>
+    <attribute from="employeeType" to="role" filter="(employeeType=Admin)"/>
+</attribute-mapping>
+
+🔹 Explanation of Each Attribute
+
+1️⃣ from (LDAP Attribute)
+	•	Specifies the LDAP attribute name that JBoss will fetch from the LDAP server.
+	•	Example: from="mail" → Fetches the mail attribute from LDAP.
+
+2️⃣ to (JBoss Attribute)
+	•	Defines how the LDAP attribute is mapped in JBoss.
+	•	Example: to="email" → Maps the mail LDAP attribute to the email attribute in JBoss.
+
+3️⃣ filter (Optional, Conditional Mapping)
+	•	Used to filter attributes based on specific conditions.
+	•	Example:
+
+<attribute from="employeeType" to="role" filter="(employeeType=Admin)"/>
+
+	•	This will only map employeeType to role if the LDAP employeeType is "Admin".
+
+🔹 Example: LDAP User Entry
+
+Let’s say you have the following user entry in LDAP:
+
+dn: uid=john.doe,ou=users,dc=example,dc=com
+cn: John Doe
+mail: john.doe@example.com
+memberOf: cn=Admins,ou=groups,dc=example,dc=com
+employeeType: Admin
+
+With the attribute-mapping:
+
+<attribute-mapping>
+    <attribute from="cn" to="commonName"/>
+    <attribute from="mail" to="email"/>
+    <attribute from="memberOf" to="groups"/>
+    <attribute from="employeeType" to="role" filter="(employeeType=Admin)"/>
+</attribute-mapping>
+
+JBoss will map this user as:
+
+JBoss Attribute	Value
+commonName	"John Doe"
+email	"john.doe@example.com"
+groups	"cn=Admins,ou=groups,dc=example,dc=com"
+role	"Admin" (Only if employeeType=Admin)
+
+🔹 Why Use attribute-mapping?
+	•	Standardizes LDAP attributes for easy role mapping.
+	•	Filters attributes dynamically.
+	•	Helps with role-based access control (RBAC).
+
+✅ Summary
+
+Attribute	Purpose
+from	Specifies the LDAP attribute to fetch.
+to	Defines the JBoss attribute name.
+filter	Conditionally maps the attribute based on a filter.
+
+🚀 Next Steps
+	•	Run ldapsearch to check actual LDAP attributes:
+
+ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=users,dc=example,dc=com" "(uid=john.doe)"
+
+
+	•	Ensure attribute-mapping matches your LDAP schema.
+	•	Check logs if attributes aren’t mapped correctly:
+
+tail -f $JBOSS_HOME/standalone/log/server.log
+
+
+
+Let me know if you need help debugging! 🚀
+
+
+
 You’re right! The command /authentication=ldap:test-connection(name=LDAPRealm) does not exist in JBoss EAP 8. Instead, you can verify LDAP connectivity using other methods.
 
 ✅ Alternative Ways to Test LDAP Connection in JBoss EAP 8
