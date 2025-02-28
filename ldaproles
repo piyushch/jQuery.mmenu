@@ -1,3 +1,77 @@
+To check if JBoss EAP 8 is able to connect to the LDAP server and fetch the user, follow these debugging steps:
+
+🔹 Step 1: Enable Debug Logs for LDAP Authentication
+
+Run the following in the JBoss CLI:
+
+/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)
+/subsystem=logging/logger=org.wildfly.security:add(level=DEBUG)
+reload
+
+This will log detailed LDAP authentication steps in server.log.
+
+Now, try logging in and check the logs:
+
+tail -f $JBOSS_HOME/standalone/log/server.log
+
+Look for:
+	•	LDAP connection success/failure messages.
+	•	User search results (e.g., “User [username] found”).
+	•	Role assignment issues.
+
+🔹 Step 2: Test LDAP Connection in JBoss CLI
+
+Run the following test authentication command:
+
+/authentication=ldap:test-connection(name=LDAPRealm)
+
+Expected output:
+	•	outcome="success" → JBoss can connect to LDAP.
+	•	outcome="failed" → There is a connection issue (check logs).
+
+🔹 Step 3: Manually Fetch User from LDAP
+
+If authentication fails, test the LDAP query manually outside JBoss using ldapsearch:
+
+ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=users,dc=example,dc=com" "(uid=<LDAP_USERNAME>)"
+
+Expected result:
+	•	User details appear → The user exists in LDAP.
+	•	No results → The user is missing or the query is incorrect.
+
+🔹 Step 4: Verify LDAP Realm Configuration in JBoss
+
+Check if the LDAP realm is properly configured:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)
+
+Look for:
+	•	url="ldap://<LDAP_SERVER>:389"
+	•	rdn-identifier="uid"
+	•	search-base-dn="ou=users,dc=example,dc=com"
+
+🔹 Step 5: Verify Role Mapping (If User is Found But Login Fails)
+
+If LDAP can find the user but login still fails, check role mapping:
+
+/subsystem=elytron/security-domain=ManagementDomain:read-resource(include-runtime=true)
+
+Look for:
+	•	role-decoder=groups-to-roles
+	•	Correct group search filter in ldap-realm.
+
+✅ Summary
+
+Step	Command	Purpose
+Enable Debug Logs	/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)	See detailed LDAP logs
+Test LDAP Connection	/authentication=ldap:test-connection(name=LDAPRealm)	Check if JBoss can connect
+Fetch User from LDAP	ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=users,dc=example,dc=com" "(uid=<LDAP_USERNAME>)"	Verify if user exists
+Check LDAP Realm Config	/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)	Ensure search filters are correct
+Verify Role Mapping	/subsystem=elytron/security-domain=ManagementDomain:read-resource(include-runtime=true)	Ensure roles are assigned correctly
+
+Run these tests and check the logs, then let me know what errors or issues you find! 🚀
+
+
 If the logs show only “Obtained lock for identity [username]” but you’re still unable to log in, it suggests that:
 	1.	The user is found in LDAP, and authentication is likely successful, but
 	2.	The user might not have the required roles to access the Management Console.
