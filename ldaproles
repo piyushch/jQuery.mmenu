@@ -1,0 +1,60 @@
+If the logs show only “Obtained lock for identity [username]” but you’re still unable to log in, it suggests that:
+	1.	The user is found in LDAP, and authentication is likely successful, but
+	2.	The user might not have the required roles to access the Management Console.
+
+🔹 Step 1: Check Role Mapping
+
+Since JBoss Elytron requires users to have specific roles for Management Console access, verify the assigned roles.
+
+Run the following command in the JBoss CLI to check if the roles are correctly mapped:
+
+/subsystem=elytron/security-domain=ManagementDomain:read-resource(include-runtime=true)
+
+Look for:
+	•	role-decoder value (should be groups-to-roles or a custom role mapper).
+	•	Assigned roles under realms.
+
+If roles are missing, check the role mapping configuration in the LDAP realm.
+
+🔹 Step 2: Manually Check the User’s Groups
+
+If the role-decoder is groups-to-roles, verify if the user is assigned any roles by running an LDAP query:
+
+ldapsearch -x -LLL -H ldap://<LDAP_SERVER>:389 -D "cn=admin,dc=example,dc=com" -w <LDAP_PASSWORD> -b "ou=groups,dc=example,dc=com" "(member=uid=<LDAP_USERNAME>,ou=users,dc=example,dc=com)"
+
+This should return the groups the user belongs to.
+
+🔹 Step 3: Verify Required Roles for Management Console
+
+JBoss requires at least one of these roles to access the Management Console:
+	•	Administrator
+	•	SuperUser
+	•	Monitor
+	•	Auditor
+	•	Deployer
+
+If the user does not have a mapped role, update your LDAP role mapping in Elytron:
+
+/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=role-decoder, value=groups-to-roles)
+
+Then reload the configuration:
+
+reload
+
+🔹 Step 4: Assign a Static Role (For Testing)
+
+If LDAP role mapping isn’t working as expected, try assigning a static role in Elytron for debugging:
+
+/subsystem=elytron/security-role-mapper=StaticAdminRole:add(roles=[Administrator])
+/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=realms, value=[{realm=LDAPRealm, role-mapper=StaticAdminRole}])
+reload
+
+Now, try logging in again.
+
+✅ Next Steps
+	1.	Check LDAP role mapping (role-decoder) in ManagementDomain.
+	2.	Run ldapsearch to verify the user’s groups.
+	3.	Ensure the user has a required role (Administrator, SuperUser, etc.)
+	4.	Try assigning a static role for testing.
+
+Let me know what you find in these checks! 🚀
