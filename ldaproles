@@ -58,3 +58,44 @@ Now, try logging in again.
 	4.	Try assigning a static role for testing.
 
 Let me know what you find in these checks! 🚀
+
+
+
+
+
+
+
+
+
+To grant the SuperUser role to all users authenticated via LDAP in JBoss EAP 8, you need to configure a constant-role-mapper in Elytron. This will ensure that any user logging in via LDAP automatically gets the SuperUser role.
+
+🔹 Step 1: Create a Constant Role Mapper
+
+This will map all LDAP-authenticated users to the SuperUser role.
+
+Run the following command in the JBoss CLI:
+
+/subsystem=elytron/constant-role-mapper=AllUsersSuperUser:add(roles=[SuperUser])
+
+🔹 Step 2: Assign Role Mapper to the Security Domain
+
+Now, apply this role mapper to your security domain (typically ManagementDomain):
+
+/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=realms, value=[{realm=LDAPRealm, role-mapper=AllUsersSuperUser}])
+
+🔹 Step 3: Reload the Configuration
+
+Apply the changes by reloading JBoss:
+
+reload
+
+✅ Summary
+
+Step	Command	Purpose
+Create Role Mapper	/subsystem=elytron/constant-role-mapper=AllUsersSuperUser:add(roles=[SuperUser])	Assigns SuperUser role to all users
+Apply to Security Domain	/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=realms, value=[{realm=LDAPRealm, role-mapper=AllUsersSuperUser}])	Uses the role mapper in LDAP realm
+Reload	reload	Apply changes
+
+Now, any LDAP-authenticated user will automatically have the SuperUser role and should be able to log in to the Management Console.
+
+Try logging in and let me know if you need further tweaks! 🚀
