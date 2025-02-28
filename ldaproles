@@ -1,3 +1,72 @@
+The correct command in JBoss CLI to check the LDAP realm configuration is:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:read-resource(include-runtime=true)
+
+What to Look for in the Output?
+
+The output will display details about how JBoss connects to LDAP. Check for the following:
+	1.	LDAP URL:
+
+"url" => "ldap://<LDAP_SERVER>:389"
+
+	•	Ensure the correct LDAP server IP/hostname and port.
+	•	If using LDAPS, it should be ldaps://<LDAP_SERVER>:636.
+
+	2.	Search Base DN:
+
+"search-base-dn" => "ou=users,dc=example,dc=com"
+
+	•	This defines where in LDAP JBoss searches for users.
+
+	3.	User Search Attribute (RDN Identifier):
+
+"rdn-identifier" => "uid"
+
+	•	This is the attribute used to match a user (e.g., uid, cn, sAMAccountName for Active Directory).
+
+	4.	Credential Used for Binding (Bind DN and Password):
+
+"principal" => "cn=admin,dc=example,dc=com"
+
+	•	Ensure JBoss has correct bind credentials.
+
+	5.	Role Mapping (If Using Groups for Authorization):
+
+"principal-to-group" => {
+    "group-search" => {
+        "group-name" => "cn",
+        "group-dn-attribute" => "dn",
+        "group-name-attribute" => "cn",
+        "iterative" => true
+    }
+}
+
+	•	This determines how roles are assigned based on LDAP groups.
+
+🔹 If Something is Incorrect, Update the LDAP Realm
+
+For example, to change the search base DN, run:
+
+/subsystem=elytron/ldap-realm=LDAPRealm:write-attribute(name=search-base-dn, value="ou=employees,dc=example,dc=com")
+reload
+
+✅ Next Steps
+	•	If authentication is failing, check logs after enabling debug mode:
+
+/subsystem=logging/logger=org.wildfly.security.auth.realm.ldap:add(level=DEBUG)
+reload
+
+Then check:
+
+tail -f $JBOSS_HOME/standalone/log/server.log
+
+
+	•	If login works but roles are missing, verify the principal-to-group settings.
+
+Try this and let me know what you find! 🚀
+
+
+
 
 The attribute-mapping section in JBoss Elytron LDAP realm is used to map LDAP attributes to JBoss security attributes.
 
