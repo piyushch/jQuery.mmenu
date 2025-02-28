@@ -1,0 +1,64 @@
+To define a new role mapper for LDAP in JBoss EAP 8 and add it to the Elytron configuration, follow these steps:
+
+🔹 Step 1: Define a Role Mapper for LDAP Groups
+
+In JBoss CLI, create a principal-to-group role mapper that extracts roles based on an LDAP attribute like memberOf:
+
+/subsystem=elytron/principal-to-group=LDAPRoleMapper:add(group-attribute="memberOf")
+
+Explanation:
+	•	group-attribute="memberOf": Extracts user groups from the memberOf attribute in LDAP.
+
+🔹 Step 2: Modify the LDAP Realm to Use Group Search
+
+Now, update the LDAP Realm to define how groups are searched.
+
+/subsystem=elytron/ldap-realm=LDAPRealm:write-attribute(name=identity-mapping, value={rdn-identifier="uid", search-base-dn="ou=users,dc=example,dc=com", attribute-mapping=[{to=Roles, from="cn", filter="(member={0})", filter-base-dn="ou=groups,dc=example,dc=com", recursive=true}]})
+
+Explanation:
+	•	rdn-identifier="uid": Identifies users by the uid attribute.
+	•	search-base-dn="ou=users,dc=example,dc=com": Defines where to search for users.
+	•	attribute-mapping:
+	•	to="Roles": Maps extracted groups to Elytron roles.
+	•	from="cn": Uses the cn attribute for group names.
+	•	filter="(member={0})": Searches for groups where the user is a member.
+	•	filter-base-dn="ou=groups,dc=example,dc=com": Searches under the groups OU.
+	•	recursive=true: Enables recursive group lookup (nested groups).
+
+🔹 Step 3: Assign the Role Mapper to the Security Domain
+
+Now, update the Elytron Security Domain to use the new role mapper:
+
+/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=realms, value=[{realm=LDAPRealm, role-mapper=LDAPRoleMapper}])
+
+Explanation:
+	•	role-mapper=LDAPRoleMapper: Uses the role mapper created in Step 1.
+
+🔹 Step 4: Verify the Configuration
+
+Check if the role mapper is correctly applied:
+
+/subsystem=elytron/principal-to-group=LDAPRoleMapper:read-resource
+/subsystem=elytron/security-domain=ManagementDomain:read-resource
+
+Restart JBoss to apply changes:
+
+reload
+
+✅ Summary
+
+Step	Command	Purpose
+Create Role Mapper	/subsystem=elytron/principal-to-group=LDAPRoleMapper:add(group-attribute="memberOf")	Extracts roles from memberOf
+Update LDAP Realm	/subsystem=elytron/ldap-realm=LDAPRealm:write-attribute(name=identity-mapping, value={...})	Defines group search logic
+Assign Role Mapper	/subsystem=elytron/security-domain=ManagementDomain:write-attribute(name=realms, value=[{realm=LDAPRealm, role-mapper=LDAPRoleMapper}])	Uses the role mapper
+Verify Settings	/subsystem=elytron/security-domain=ManagementDomain:read-resource	Checks if mapping is active
+
+🎯 Next Steps
+	1.	Try logging in with an LDAP user and check the logs.
+	2.	If authentication fails, enable debug logs:
+
+/subsystem=logging/logger=org.wildfly.security:add(level=DEBUG)
+
+
+
+Let me know if you need further adjustments! 🚀
