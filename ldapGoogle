@@ -1,3 +1,157 @@
+To grant **SuperUser** access to users who are found in LDAP and are members of the `APP_USER` group in **JBoss EAP 8**, follow these steps:  
+
+---
+
+## **📌 Step 1: Connect to JBoss CLI**
+Run the JBoss CLI to connect to the running server:
+```sh
+./jboss-cli.sh --connect
+```
+
+---
+
+## **📌 Step 2: Configure LDAP Authentication for the Management Console**
+
+### **1️⃣ Define an LDAP Directory Context**
+This establishes a connection to the LDAP server.
+```sh
+/subsystem=elytron/dir-context=ldap-dir:add(
+    url="sldap://your-ldap-server:636",
+    principal="CN=admin,CN=SAI,DC=ABC,DC=com",
+    credential="your_admin_password",
+    referral-mode="follow"
+)
+```
+
+---
+
+### **2️⃣ Create an LDAP Realm for Authentication**
+This ensures that only users **who exist in LDAP and belong to `APP_USER`** can authenticate.
+```sh
+/subsystem=elytron/ldap-realm=ldapRealm:add(
+    dir-context=ldap-dir,
+    identity-mapping={
+        rdn-identifier="sAMAccountName",
+        search-base-dn="CN=SAI,DC=ABC,DC=com",
+        search-recursive=true,
+        search-filter="(&(sAMAccountName={0})(memberOf=CN=APP_USER,CN=SAI,DC=ABC,DC=com))",
+        attribute-mapping=[
+            { from="sAMAccountName", to="username" },
+            { from="memberOf", to="roles" }
+        ]
+    }
+)
+```
+
+---
+
+### **3️⃣ Define a Role Mapper to Assign SuperUser Role**
+Users found in LDAP should automatically be assigned **SuperUser** access.
+```sh
+/subsystem=elytron/simple-role-decoder=superuser-role-decoder:add(attribute="roles")
+
+/subsystem=elytron/security-domain=ManagementDomain:add(
+    default-realm=ldapRealm,
+    permission-mapper=default-permission-mapper,
+    realms=[{realm=ldapRealm, role-decoder=superuser-role-decoder}]
+)
+```
+
+---
+
+### **4️⃣ Apply LDAP Authentication to the Management Console**
+```sh
+/core-service=management/access=authorization:write-attribute(name=provider, value=elytron)
+/core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=ManagementDomain)
+```
+
+---
+
+## **📌 Step 3: Restart JBoss for Changes to Take Effect**
+```sh
+./standalone.sh --server-config=standalone.xml
+```
+
+---
+
+## **✅ Expected Behavior**
+1. Users **must be in LDAP** and in the `APP_USER` group.
+2. If authentication is successful, **they are automatically assigned SuperUser access** to the **JBoss Management Console**.
+3. The user can now log in at:
+   ```
+   https://your-jboss-server:9990
+   ```
+
+---
+
+## **⚠️ Notes**
+- Ensure your **LDAP server's SSL certificate** is trusted by Java (`cacerts`).
+- If users belong to nested groups, you may need **recursive group membership checking**.
+- To debug authentication, enable Elytron debugging:
+  ```sh
+  /subsystem=logging/logger=org.wildfly.security:add(level=TRACE)
+  ```
+
+This is the **correct CLI-based method** for integrating LDAP authentication **with SuperUser access** in **JBoss EAP 8 Management Console**. 🚀 Let me know if you need further help!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+batch
+
+/subsystem=elytron/dir-context=ldap-dir:add(
+    url="sldap://your-ldap-server:636",
+    principal="CN=admin,CN=SAI,DC=ABC,DC=com",
+    credential="your_admin_password",
+    referral-mode="follow"
+)
+
+/subsystem=elytron/ldap-realm=ldapRealm:add(
+    dir-context=ldap-dir,
+    identity-mapping={
+        rdn-identifier="sAMAccountName",
+        search-base-dn="CN=SAI,DC=ABC,DC=com",
+        search-recursive=true,
+        search-filter="(&(sAMAccountName={0})(memberOf=CN=APP_USER,CN=SAI,DC=ABC,DC=com))",
+        attribute-mapping=[
+            { from="sAMAccountName", to="username" },
+            { from="memberOf", to="roles" }
+        ]
+    }
+)
+
+/subsystem=elytron/security-domain=ManagementDomain:add(
+    default-realm=ldapRealm,
+    permission-mapper=default-permission-mapper,
+    realms=[{realm=ldapRealm, role-decoder=groups-to-roles}]
+)
+
+/core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=ManagementDomain)
+
+run-batch
+
+
+
+
+
+
+
+
+
+
+
+
+
 <ldap-realm name="ldapRealm">
     <dir-context>
         <ldap-connection url="sldap://your-ldap-server:636"
