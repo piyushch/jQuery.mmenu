@@ -1,3 +1,82 @@
+All right, let's refine the configuration to search from the base DN "CN=SAI,DC=ABC,DC=com" and grant "SuperUser" role to users whose `sAMAccountName` is a member of the `APP_USERS` group.
+
+Here's the modified CLI command:
+
+```cli
+/subsystem=elytron/ldap-realm=LdapRealm:add(dir-context={url="sldap://your-ldap-server:636", base-dn="DC=ABC,DC=com", search-dn-recursion=0}, identity-mapping={rdn="sAMAccountName", search-base-dn="CN=SAI,DC=ABC,DC=com", search-filter="(sAMAccountName={0})"}, group-mapping=[{base-dn="CN=Users,DC=ABC,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", user-attribute="distinguishedName", role-attribute="cn", role-recursion=0, roles=["SuperUser"]}])
+```
+
+**Key Changes and Explanations:**
+
+1.  **`dir-context={url="sldap://your-ldap-server:636", base-dn="DC=ABC,DC=com", search-dn-recursion=0}`:**
+    * The `base-dn` here is set to the highest level where all searches will start, in your case "DC=ABC,DC=com". This is a good practice as it allows for flexibility in the search scopes.
+
+2.  **`identity-mapping={rdn="sAMAccountName", search-base-dn="CN=SAI,DC=ABC,DC=com", search-filter="(sAMAccountName={0})"} `:**
+    * `rdn="sAMAccountName"`: We are now searching based on the sAMAccountName attribute.
+    * `search-base-dn="CN=SAI,DC=ABC,DC=com"`: The user search will now start from the organizational unit "CN=SAI,DC=ABC,DC=com". This is where your user accounts are located.
+    * `search-filter="(sAMAccountName={0})"`: This filter will search for a user whose `sAMAccountName` matches the username entered during login.
+
+3.  **`group-mapping=[{base-dn="CN=Users,DC=ABC,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", user-attribute="distinguishedName", role-attribute="cn", role-recursion=0, roles=["SuperUser"]}]`:**
+    * `base-dn="CN=Users,DC=ABC,DC=com"`: The group search will start in the "CN=Users,DC=ABC,DC=com" location.
+    * The rest of the group mapping remains the same, ensuring that if the user's `distinguishedName` is found as a member of the `APP_USERS` group, they will be granted the "SuperUser" role.
+
+**Complete Steps:**
+
+1.  **Start JBoss EAP CLI:**
+
+    ```bash
+    $JBOSS_HOME/bin/jboss-cli.sh --connect
+    ```
+
+2.  **Add the LDAP Security Realm:**
+
+    ```cli
+    /subsystem=elytron/ldap-realm=LdapRealm:add(dir-context={url="sldap://your-ldap-server:636", base-dn="DC=ABC,DC=com", search-dn-recursion=0}, identity-mapping={rdn="sAMAccountName", search-base-dn="CN=SAI,DC=ABC,DC=com", search-filter="(sAMAccountName={0})"}, group-mapping=[{base-dn="CN=Users,DC=ABC,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", user-attribute="distinguishedName", role-attribute="cn", role-recursion=0, roles=["SuperUser"]}])
+    ```
+
+3.  **Configure Application Security Domain:**
+
+    ```cli
+    /subsystem=elytron/security-domain=LdapSecurityDomain:add(realms=[{realm=LdapRealm, role-decoder=groups-to-roles}], default-realm=LdapRealm, permission-mapper=default-permission-mapper)
+    ```
+
+4.  **Configure Management Interface:**
+
+    ```cli
+    /core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=LdapSecurityDomain)
+    ```
+
+5.  **Reload the Server:**
+
+    ```cli
+    reload
+    ```
+
+**Important Notes:**
+
+* **LDAP Structure:** Double-check your LDAP structure to ensure that the base DNs and search filters are correct.
+* **Case Sensitivity:** LDAP searches can sometimes be case-sensitive, so pay attention to the case of your DNs and attribute names.
+* **Testing:** Thoroughly test the configuration with a user in the `APP_USERS` group.
+* **Error Logs:** If you encounter issues, review the JBoss EAP server logs for error messages.
+* **SSL/TLS:** Ensure that your LDAP server's SSL/TLS certificate is correctly imported into the JBoss EAP truststore if you are using `sldap://`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Absolutely, let's break down how to configure Red Hat JBoss EAP 8 (WildFly 27) for LDAP authentication for the management console, specifically targeting users in an Active Directory group and granting them superuser privileges.
 
 **Prerequisites:**
