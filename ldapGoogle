@@ -1,0 +1,99 @@
+Absolutely, let's break down how to configure Red Hat JBoss EAP 8 (WildFly 27) for LDAP authentication for the management console, specifically targeting users in an Active Directory group and granting them superuser privileges.
+
+**Prerequisites:**
+
+* **Running JBoss EAP 8:** Ensure your JBoss EAP 8 server is up and running.
+* **LDAP Server Details:** You need the following information:
+    * LDAP server URL (e.g., `sldap://your-ldap-server:636`)
+    * Base DN (e.g., `DC=yourdomain,DC=com`)
+    * User DN pattern (e.g., `CN={0},CN=Users,DC=yourdomain,DC=com`)
+    * Group DN (e.g., `CN=APP_USERS,CN=Users,DC=yourdomain,DC=com`)
+    * SSL certificate for your LDAP server (if using `sldap`).
+* **JBoss EAP CLI:** You'll be using the JBoss EAP command-line interface (CLI) for configuration.
+
+**Steps:**
+
+1.  **Import LDAP SSL Certificate (if using sldap):**
+
+    * If your LDAP server uses `sldap://`, you need to import its SSL certificate into the JBoss EAP truststore.
+    * Obtain the LDAP server's certificate (e.g., `ldap-server.crt`).
+    * Use the `keytool` utility to import it:
+
+    ```bash
+    $JAVA_HOME/bin/keytool -import -alias ldap-server -keystore $JBOSS_HOME/standalone/configuration/keystore.jks -file ldap-server.crt -storepass changeit
+    ```
+
+    * Replace `$JAVA_HOME`, `$JBOSS_HOME`, `ldap-server.crt`, and `changeit` with your actual values.
+    * If the keystore.jks file does not exist, the keytool command will create it.
+
+2.  **Configure LDAP Security Realm:**
+
+    * Start the JBoss EAP CLI:
+
+    ```bash
+    $JBOSS_HOME/bin/jboss-cli.sh --connect
+    ```
+
+    * Add the LDAP security realm:
+
+    ```cli
+    /subsystem=elytron/ldap-realm=LdapRealm:add(dir-context={url="sldap://your-ldap-server:636", base-dn="DC=yourdomain,DC=com", search-dn-recursion=0}, identity-mapping={rdn="CN", search-base-dn="DC=yourdomain,DC=com", search-filter="(sAMAccountName={0})"}, group-mapping=[{base-dn="CN=Users,DC=yourdomain,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", user-attribute="distinguishedName", role-attribute="cn", role-recursion=0, roles=["SuperUser"]}])
+    ```
+
+    * **Explanation:**
+        * `url`: Your LDAP server URL.
+        * `base-dn`: The base DN for your LDAP directory.
+        * `identity-mapping`: Defines how to map user credentials to LDAP entries.
+            * `rdn`: The relative distinguished name attribute (usually `CN` or `sAMAccountName`).
+            * `search-base-dn`: The base DN for user searches.
+            * `search-filter`: The LDAP filter to find users.
+        * `group-mapping`: Defines how to map LDAP groups to JBoss EAP roles.
+            * `base-dn`: The base DN for group searches.
+            * `search-filter`: The LDAP filter to find the `APP_USERS` group.
+            * `user-attribute`: The attribute to use for user membership (usually `distinguishedName`).
+            * `role-attribute`: The attribute that holds the group's name (usually `cn`).
+            * `roles`: The JBoss EAP roles to assign to members of the group (in this case, `SuperUser`).
+        * `search-dn-recursion`: 0 to avoid recursive searches.
+        * `role-recursion`: 0 to avoid recursive role searches.
+
+3.  **Configure Application Security Domain:**
+
+    * Add the application security domain:
+
+    ```cli
+    /subsystem=elytron/security-domain=LdapSecurityDomain:add(realms=[{realm=LdapRealm, role-decoder=groups-to-roles}], default-realm=LdapRealm, permission-mapper=default-permission-mapper)
+    ```
+
+    * This creates a security domain that uses the LDAP realm you configured.
+
+4.  **Configure Management Interface:**
+
+    * Update the management interface to use the LDAP security domain:
+
+    ```cli
+    /core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=LdapSecurityDomain)
+    ```
+
+5.  **Reload the Server:**
+
+    * Reload the server to apply the changes:
+
+    ```cli
+    reload
+    ```
+
+6.  **Test the Configuration:**
+
+    * Open your JBoss EAP management console in a web browser.
+    * Use the username and password of a user in the `APP_USERS` Active Directory group.
+
+**Important Notes:**
+
+* **Error Handling:** If you encounter authentication issues, check the JBoss EAP server logs (`$JBOSS_HOME/standalone/log/server.log`) for detailed error messages.
+* **LDAP Security:** Ensure your LDAP server is properly secured with SSL/TLS and appropriate access controls.
+* **Role Mapping:** Adjust the `group-mapping` configuration to match your LDAP directory structure and desired role assignments.
+* **User DN Pattern:** The provided User DN pattern is a common one, but your AD structure may differ. Check your AD structure.
+* **AD attributes**: AD attributes may differ. for example, instead of sAMAccountName, userPrincipalName can be used.
+* **Troubleshooting SSL/TLS:** If you have problems with the SSL/TLS connection to your LDAP server, verify that the certificate is correctly imported and that your JBoss EAP server can reach the LDAP server on the specified port.
+
+By following these steps, you should be able to configure your JBoss EAP 8 server to authenticate users from your Active Directory LDAP server and grant them superuser access to the management console.
