@@ -1,76 +1,41 @@
-You're right, my apologies! The `group-mapping` property is not directly supported in the way I presented it. The correct approach for mapping groups to roles in Elytron's LDAP realm involves using a combination of `identity-mapping` and a `role-mapping` configuration.
+<ldap-realm name="ldapRealm">
+    <dir-context>
+        <ldap-connection url="sldap://your-ldap-server:636"
+                         connect-timeout="5000"
+                         search-timeout="3000">
+            <authentication mechanism="simple">
+                <username>CN=admin,CN=SAI,DC=ABC,DC=com</username>
+                <password>your_admin_password</password>
+            </authentication>
+        </ldap-connection>
+        <base-dn>CN=SAI,DC=ABC,DC=com</base-dn>
+    </dir-context>
+    <identity-mapping 
+         search-recursive="true"
+         search-filter="(&(sAMAccountName={0})(memberOf=CN=APP_USER,CN=SAI,DC=ABC,DC=com))">
+        <!-- Use sAMAccountName as the principal name -->
+        <attribute name="sAMAccountName" to-principal="true"/>
+        <!-- Map the memberOf attribute to a constant role -->
+        <attribute name="memberOf">
+            <ignore-missing-attribute>false</ignore-missing-attribute>
+            <role-mapper>
+                <constant-role-mapper roles="SuperUser"/>
+            </role-mapper>
+        </attribute>
+    </identity-mapping>
+</ldap-realm>
 
-Let's correct the configuration to achieve the desired result:
+--Next, create a security domain that uses the LDAP realm. Add this within the same Elytron subsystem:
 
-**Corrected Configuration:**
+<security-domain name="ManagementDomain" default-realm="ldapRealm" permission-mapper="default-permission-mapper">
+    <realm name="ldapRealm" role-decoder="groups-to-roles"/>
+</security-domain>
 
-1.  **Configure LDAP Realm with Role Mapping:**
 
-    ```cli
-    /subsystem=elytron/ldap-realm=LdapRealm:add(dir-context={url="sldap://your-ldap-server:636", base-dn="DC=ABC,DC=com", search-dn-recursion=0}, identity-mapping={rdn="sAMAccountName", search-base-dn="CN=SAI,DC=ABC,DC=com", search-filter="(sAMAccountName={0})"}, role-mapping={groups-attribute="memberOf", search-base-dn="CN=Users,DC=ABC,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", roles=["SuperUser"]})
-    ```
+This configuration makes the management console (typically available at https://your-jboss-server:9990) use the Elytron security domain “ManagementDomain” for authentication.
+<management>
+    <management-interfaces>
+        <http-interface security-realm="ManagementDomain" http-upgrade-enabled="true" />
+    </management-interfaces>
+</management>
 
-    **Explanation of Changes:**
-
-    * **`role-mapping`:** We've replaced `group-mapping` with `role-mapping`. This is the correct property for mapping LDAP groups to JBoss EAP roles.
-    * **`groups-attribute="memberOf"`:** This specifies the LDAP attribute that holds the user's group memberships. In Active Directory, it's typically `memberOf`.
-    * **`search-base-dn="CN=Users,DC=ABC,DC=com"`:** This is the base DN for the group search.
-    * **`search-filter="(&(objectClass=group)(cn=APP_USERS))"`:** This filter locates the `APP_USERS` group.
-    * **`roles=["SuperUser"]`:** This assigns the "SuperUser" role to users who are members of the `APP_USERS` group.
-
-2.  **Configure Application Security Domain:**
-
-    ```cli
-    /subsystem=elytron/security-domain=LdapSecurityDomain:add(realms=[{realm=LdapRealm, role-decoder=groups-to-roles}], default-realm=LdapRealm, permission-mapper=default-permission-mapper)
-    ```
-
-3.  **Configure Management Interface:**
-
-    ```cli
-    /core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=LdapSecurityDomain)
-    ```
-
-4.  **Reload the Server:**
-
-    ```cli
-    reload
-    ```
-
-**Complete Corrected Steps:**
-
-1.  **Start JBoss EAP CLI:**
-
-    ```bash
-    $JBOSS_HOME/bin/jboss-cli.sh --connect
-    ```
-
-2.  **Add the LDAP Security Realm (with role mapping):**
-
-    ```cli
-    /subsystem=elytron/ldap-realm=LdapRealm:add(dir-context={url="sldap://your-ldap-server:636", base-dn="DC=ABC,DC=com", search-dn-recursion=0}, identity-mapping={rdn="sAMAccountName", search-base-dn="CN=SAI,DC=ABC,DC=com", search-filter="(sAMAccountName={0})"}, role-mapping={groups-attribute="memberOf", search-base-dn="CN=Users,DC=ABC,DC=com", search-filter="(&(objectClass=group)(cn=APP_USERS))", roles=["SuperUser"]})
-    ```
-
-3.  **Configure Application Security Domain:**
-
-    ```cli
-    /subsystem=elytron/security-domain=LdapSecurityDomain:add(realms=[{realm=LdapRealm, role-decoder=groups-to-roles}], default-realm=LdapRealm, permission-mapper=default-permission-mapper)
-    ```
-
-4.  **Configure Management Interface:**
-
-    ```cli
-    /core-service=management/management-interface=http-interface:write-attribute(name=security-realm, value=LdapSecurityDomain)
-    ```
-
-5.  **Reload the Server:**
-
-    ```cli
-    reload
-    ```
-
-**Key Improvements:**
-
-* **Corrected Property:** Using `role-mapping` instead of `group-mapping` resolves the error.
-* **Active Directory Compatibility:** Using `groups-attribute="memberOf"` correctly retrieves group memberships from Active Directory.
-
-Please use this corrected configuration. It should resolve the issue and correctly map users in the `APP_USERS` group to the "SuperUser" role.
