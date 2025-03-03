@@ -1,0 +1,69 @@
+To find the correct password encoding for LDAP authentication, you can try the following methods:
+
+1. Check LDAP Server Configuration
+
+Active Directory (AD)
+	•	AD typically does not store passwords in LDAP but verifies them using Kerberos or NTLM.
+	•	AD requires plain-text password for LDAP authentication when using simple bind over a secure connection (LDAPS or StartTLS).
+
+OpenLDAP
+	•	OpenLDAP can store passwords in different formats (hashes).
+	•	Use the following command to check password hashes in OpenLDAP:
+
+ldapsearch -LLL -x -D "cn=admin,dc=example,dc=com" -W -b "dc=example,dc=com" "(uid=username)" userPassword
+
+
+	•	Common password formats:
+	•	{CLEARTEXT} (Plain text)
+	•	{SHA} (SHA-1)
+	•	{SSHA} (Salted SHA-1)
+	•	{MD5} (MD5)
+	•	{CRYPT} (UNIX crypt)
+
+2. Try Authenticating with Plain Text Password
+	•	If your connection is secured (LDAPS or StartTLS), try binding with a plain-text password:
+
+ldapwhoami -x -H ldaps://ldap.example.com -D "CN=John Doe,CN=Users,DC=example,DC=com" -w "yourpassword"
+
+	•	If this works, your LDAP requires plain-text passwords.
+
+3. Check Password Hash in LDAP Attributes
+	•	If you have admin access, retrieve the stored password attribute:
+
+ldapsearch -x -H ldap://ldap.example.com -D "cn=admin,dc=example,dc=com" -W -b "dc=example,dc=com" "(uid=username)" userPassword
+
+
+	•	If it returns a hashed value like {SSHA}n4+0wfh7..., then the password is stored as SSHA.
+
+4. Verify JBoss Password Encoding Support
+	•	If JBoss is failing authentication, ensure it’s using the correct password format.
+	•	In Standalone Mode, check the JBoss security domain:
+
+<login-module code="LdapExtended" flag="required">
+    <module-option name="passwordIsA1" value="true"/>
+</login-module>
+
+	•	If passwordIsA1 is true, JBoss expects plain-text passwords.
+
+5. Decode the LDAP Password (If Hashed)
+	•	If you suspect an encoded password, try decoding it manually:
+	•	SHA/SSHA: Use an online decoder or OpenSSL:
+
+echo -n "yourpassword" | openssl dgst -sha1 -binary | base64
+
+
+	•	MD5:
+
+echo -n "yourpassword" | md5sum
+
+6. Enable Debug Logs in JBoss for LDAP
+	•	Add this to standalone.xml:
+
+<logger category="org.jboss.security">
+    <level name="DEBUG"/>
+</logger>
+
+
+	•	Restart JBoss and check logs for errors related to password encoding.
+
+Would you like help configuring your JBoss security domain to match the LDAP password format?
