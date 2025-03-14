@@ -1,0 +1,25 @@
+<host xmlns="urn:jboss:domain:14.0" name="slave-host">
+    <!-- Domain Controller configuration -->
+    <domain-controller>
+        <remote host="master.example.com" port="9990">
+            <!-- SSL configuration for mutual TLS authentication -->
+            <ssl 
+                client-keystore="client-keystore.jks" 
+                client-keystore-password="clientKeystorePassword" 
+                certificate-alias="myClientCert"/>
+        </remote>
+    </domain-controller>
+
+    <!-- Management configuration – typically used for local management on the slave -->
+    <management>
+        <management-interfaces>
+            <native-interface />
+        </management-interfaces>
+    </management>
+
+    <!-- Socket bindings for management (adjust ports as needed) -->
+    <socket-binding-group name="full-ha-sockets" default-interface="public">
+        <socket-binding name="management-native" port="9999"/>
+        <socket-binding name="management-http" port="9991"/>
+    </socket-binding-group>
+</host>
