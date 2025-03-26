@@ -1,0 +1,85 @@
+Here's a breakdown of the thought process to generate the step-by-step guide for the "In-Process Proxy" option:
+
+Understand the Core Goal: The user wants a single (ideally) deployment unit that handles SNI for abc.com and xyz.com using different certificates, proxying requests to an unmodifiable existing WAR application, without using external reverse proxies or standalone servlet containers. The chosen approach is a "wrapper" Spring Boot app acting as an SNI terminator and proxy, running alongside the original WAR in a separate process.
+Identify the Key Components:
+Wrapper Spring Boot Application (sni-wrapper).
+Original WAR Application (original.war).
+SNI Configuration (within sni-wrapper).
+Proxying Logic (within sni-wrapper).
+Startup/Deployment Mechanism (to run both processes).
+Configuration Management (telling the wrapper where the original app is).
+Structure the Guide: A step-by-step format is requested. Logical steps would be:
+Set up the Wrapper project.
+Implement SNI in the Wrapper.
+Implement the Proxying logic in the Wrapper.
+Configure the Wrapper (ports, target URL).
+Prepare the Original WAR for execution.
+Develop a Startup mechanism.
+Testing.
+Deployment Considerations.
+Flesh out each Step - Wrapper Setup (Step 1):
+Standard Spring Boot project creation (Spring Initializr).
+Key dependency: spring-boot-starter-web.
+Self-correction: Initially thought about WebFlux for WebClient, but spring-boot-starter-web (which uses Tomcat by default) is needed for the WebServerFactoryCustomizer part easily. WebClient can still be used within a Servlet-based application. Add spring-boot-starter-webflux dependency explicitly for WebClient. Correction 2: Spring Cloud Gateway simplifies proxying significantly. Mention it as the recommended way within the wrapper, but also provide a manual WebClient sketch as requested earlier. Let's prioritize Spring Cloud Gateway as it's designed for this. Change dependency to spring-cloud-starter-gateway. Adjust subsequent steps. Correction 3: If using Spring Cloud Gateway, the embedded server needs to be Netty, not Tomcat. Update WebServerFactoryCustomizer details or pivot. Decision: Stick with Tomcat initially as the WebServerFactoryCustomizer example for Tomcat is already established. Show manual proxying first, then mention Gateway as an alternative/improvement. Final Decision: Revert to spring-boot-starter-web and spring-boot-starter-webflux for WebClient first, as Gateway adds another layer of complexity/opinionation, and the user might want minimal dependencies. Add Gateway as a better alternative later.
+Flesh out each Step - SNI Implementation (Step 2):
+Reuse the WebServerFactoryCustomizer<TomcatServletWebServerFactory> code from previous interactions.
+Emphasize placing certificates correctly (classpath, filesystem).
+Mention using application.properties for configuration (paths, passwords).
+Stress disabling default SSL (server.ssl.enabled=false).
+Mention setting the HTTPS port (e.g., 443).
+Flesh out each Step - Proxy Implementation (Step 3):
+Choice: Manual WebClient vs. Spring Cloud Gateway. Start with manual WebClient as it requires fewer extra dependencies.
+Create a @RestController.
+Use @RequestMapping("/**") for catch-all.
+Inject the target URL (original.app.url) via @Value.
+Create a WebClient instance.
+Implement the proxy method:
+Get request details (method, path, query, headers, body).
+Build a WebClient request mirroring the original.
+Handle headers carefully (copying relevant ones, adding X-Forwarded-*). Host header is important.
+Handle request body (streaming).
+Execute the request.
+Handle the response (status, headers, body streaming back).
+Use Mono<ResponseEntity<byte[]>> or reactive streams.
+Refinement: Use ServerHttpRequest and ServerHttpResponse for more direct access in a Servlet context if using WebMVC. If using WebFlux controller, the parameters are slightly different. Stick with WebFlux (@RestController, WebClient, Mono) as it's often better for I/O bound proxying.
+Add a note about Spring Cloud Gateway as a superior alternative for proxying.
+Flesh out each Step - Wrapper Configuration (Step 4):
+application.properties or application.yml.
+Key properties:
+server.port (for potential HTTP access to wrapper, maybe disable or redirect).
+server.ssl.enabled=false (crucial).
+Certificate paths/passwords (used by the SNI customizer).
+original.app.url (target for proxying).
+Ports used in the SNI customizer (e.g., 443).
+Flesh out each Step - Prepare Original WAR (Step 5):
+Emphasize no modification.
+How to run it: java -jar original.war.
+Crucial: How to configure its listening port and protocol.
+Command-line arguments (--server.port=8080, --server.ssl.enabled=false).
+Environment variables (SERVER_PORT=8080, SERVER_SSL_ENABLED=false).
+External configuration file (application.properties next to the WAR).
+Recommend running it on HTTP (localhost:8080) for simplicity. Explain the alternative (HTTPS) and the need for the wrapper's WebClient to trust its certificate.
+Flesh out each Step - Startup Mechanism (Step 6):
+Need to launch two processes.
+Simple shell script (start.sh).
+Using a process manager (systemd, supervisorctl).
+Using containerization (Docker Compose). Provide a simple docker-compose.yml example. This is often the cleanest way.
+Flesh out each Step - Testing (Step 7):
+Test abc.com -> https://localhost:443 -> http://localhost:8080. Check certificate, check response.
+Test xyz.com -> https://localhost:443 -> http://localhost:8080. Check certificate, check response.
+Use curl with --resolve or edit /etc/hosts.
+Test different paths, methods (GET, POST), headers.
+Flesh out each Step - Deployment (Step 8):
+Package both as JARs.
+Place certificates securely.
+Use the chosen startup mechanism (script, systemd, Docker Compose).
+Firewall configuration (allow port 443 in).
+Review and Refine:
+Read through the steps. Are they logical? Clear?
+Are the code snippets illustrative? Add comments.
+Are the warnings and caveats prominent (e.g., complexity, two processes)?
+Is the distinction between the wrapper and original app clear throughout?
+Add a "Prerequisites" section.
+Reiterate the recommendation for Spring Cloud Gateway within the proxy step.
+Ensure consistency in naming (sni-wrapper, original.war, ports).
+Add a final "Important Considerations" section summarizing trade-offs.
