@@ -1,0 +1,236 @@
+If you want to encapsulate a WAR inside a Spring Boot application, implement SNI (Server Name Indication), and keep the existing URL structure unchanged, you have two options:
+
+⸻
+
+✅ Solution Approach
+	1.	Outer Spring Boot Application:
+	•	Manages SSL termination using SNI (different certificates for different domains).
+	•	Mounts the WAR without changing the URL structure.
+	•	Forwards requests directly to the WAR application.
+	2.	Inner WAR Application:
+	•	Runs seamlessly inside the outer Spring Boot without requiring URL changes.
+	•	All original URLs (e.g., https://abc.com/api, https://xyz.com/api) remain unchanged.
+
+⸻
+
+✅ Step-by-Step Implementation
+
+1. Ensure the WAR Supports Being Deployed in Another Application
+
+Your WAR must be compatible with Spring Boot’s embedded Tomcat by including a SpringBootServletInitializer class.
+
+Example in your WAR project:
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
+
+@SpringBootApplication
+public class MyWarApplication extends SpringBootServletInitializer {
+    public static void main(String[] args) {
+        SpringApplication.run(MyWarApplication.class, args);
+    }
+}
+
+
+
+⸻
+
+2. Create the Outer Spring Boot Application
+
+This application will:
+	•	Serve different SSL certificates for each domain using SNI.
+	•	Embed the WAR without altering the URL structure.
+
+Add these dependencies in the outer Spring Boot pom.xml:
+
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Needed to embed a WAR -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-tomcat</artifactId>
+        <scope>provided</scope>
+    </dependency>
+</dependencies>
+
+
+
+⸻
+
+3. Configure the Outer Spring Boot App
+
+This configuration will:
+	1.	Load the WAR dynamically without changing URLs.
+	2.	Implement SNI for multiple SSL certificates.
+
+import org.apache.catalina.Context;
+import org.apache.catalina.connector.Connector;
+import org.apache.catalina.webresources.TomcatResourceSet;
+import org.apache.catalina.webresources.StandardRoot;
+import org.apache.tomcat.util.net.SSLHostConfig;
+import org.apache.tomcat.util.net.SSLHostConfigCertificate;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.context.annotation.Bean;
+
+import java.io.File;
+
+@SpringBootApplication
+public class OuterApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OuterApplication.class, args);
+    }
+
+    @Bean
+    public WebServerFactoryCustomizer<TomcatServletWebServerFactory> webServerFactoryCustomizer() {
+        return factory -> {
+            // Load the WAR without changing the URL
+            factory.addContextCustomizers(this::loadWarFile);
+            factory.addConnectorCustomizers(this::configureSni);
+        };
+    }
+
+    // Method to load the WAR dynamically
+    private void loadWarFile(Context context) {
+        File warFile = new File("/path/to/your-microservice.war");
+        if (!warFile.exists()) {
+            throw new IllegalArgumentException("WAR file not found: " + warFile.getAbsolutePath());
+        }
+        context.setDocBase(warFile.getAbsolutePath());
+        context.setPath(""); // Keeps the URL structure unchanged
+
+        // Ensure Tomcat loads resources from the WAR
+        TomcatResourceSet resourceSet = new TomcatResourceSet();
+        resourceSet.setRoot(warFile.getAbsolutePath());
+        resourceSet.setWebAppMount("/");
+        resourceSet.setInternalPath("/");
+        context.getResources().addPreResources(resourceSet);
+    }
+
+    // Method to configure SNI (multiple SSL certificates)
+    private void configureSni(Connector connector) {
+        connector.setSecure(true);
+        connector.setScheme("https");
+        connector.setPort(8443);
+        connector.setProperty("SSLEnabled", "true");
+
+        // SSL for abc.com
+        SSLHostConfig abcConfig = new SSLHostConfig();
+        abcConfig.setHostName("abc.com");
+        SSLHostConfigCertificate abcCert = new SSLHostConfigCertificate(abcConfig, SSLHostConfigCertificate.Type.RSA);
+        abcCert.setCertificateFile("/ssl/abc.com.crt");
+        abcCert.setCertificateKeyFile("/ssl/abc.com.key");
+        abcConfig.addCertificate(abcCert);
+        connector.addSslHostConfig(abcConfig);
+
+        // SSL for xyz.com
+        SSLHostConfig xyzConfig = new SSLHostConfig();
+        xyzConfig.setHostName("xyz.com");
+        SSLHostConfigCertificate xyzCert = new SSLHostConfigCertificate(xyzConfig, SSLHostConfigCertificate.Type.RSA);
+        xyzCert.setCertificateFile("/ssl/xyz.com.crt");
+        xyzCert.setCertificateKeyFile("/ssl/xyz.com.key");
+        xyzConfig.addCertificate(xyzCert);
+        connector.addSslHostConfig(xyzConfig);
+    }
+}
+
+
+
+⸻
+
+4. Directory Structure
+
+Ensure the following structure:
+
+/outer-springboot-app
+ ├── /src
+ ├── /target
+ │     └── your-microservice.war
+ ├── /ssl
+ │     ├── abc.com.crt
+ │     ├── abc.com.key
+ │     ├── xyz.com.crt
+ │     └── xyz.com.key
+ └── pom.xml
+
+
+
+⸻
+
+5. Build and Run the Application
+	1.	Package the WAR from the microservice:
+
+cd your-microservice
+mvn clean package
+
+	2.	Move the WAR to the /target directory of your outer Spring Boot app.
+	3.	Run the outer Spring Boot app:
+
+mvn spring-boot:run
+
+
+
+⸻
+
+6. Test the SNI and URL Structure
+
+✅ Ensure that both domains work with their corresponding SSL certificates and that the original URL paths remain unchanged:
+
+curl -I https://abc.com/api
+curl -I https://xyz.com/api
+
+
+
+⸻
+
+✅ Alternative: Use a Reverse Proxy
+
+If you want to simplify SSL management:
+	1.	Set up Nginx or HAProxy to handle SNI.
+	2.	Let your Spring Boot app serve content without SSL.
+	3.	Your microservice URLs remain unchanged.
+
+Example Nginx config for SNI:
+
+server {
+    listen 443 ssl;
+    server_name abc.com;
+
+    ssl_certificate /ssl/abc.com.crt;
+    ssl_certificate_key /ssl/abc.com.key;
+
+    location / {
+        proxy_pass http://localhost:8080;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name xyz.com;
+
+    ssl_certificate /ssl/xyz.com.crt;
+    ssl_certificate_key /ssl/xyz.com.key;
+
+    location / {
+        proxy_pass http://localhost:8080;
+    }
+}
+
+
+
+⸻
+
+✅ Summary
+	1.	Inner WAR – Stays unchanged and embedded in the outer Spring Boot app.
+	2.	Outer Spring Boot – Manages SNI and serves different SSL certificates.
+	3.	URL Structure – Stays the same without modifications.
+
+Would you like to extend this to Docker or Kubernetes deployments?
