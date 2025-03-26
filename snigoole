@@ -1,0 +1,102 @@
+Okay, given the strict constraints (no changes to the WAR, no external reverse proxy, no standalone Tomcat instance, implying a desire for a single deployable/runnable artifact/process if possible), the options become very limited and veer into non-standard territory.
+
+Let's reconsider the "encapsulation" idea but shift the implementation away from the highly problematic internal WAR deployment:
+
+Option 1: The "In-Process Proxy" using Spring Boot (Most Viable Under Constraints)
+
+This approach avoids the classloader nightmare by not trying to deploy the original WAR inside the wrapper's servlet container context. Instead, the wrapper acts purely as an SNI-terminating entry point that forwards traffic to the original application running as a separate process.
+
+Architecture:
+SNI Wrapper Application (Spring Boot):
+This is a minimal Spring Boot application.
+It uses WebServerFactoryCustomizer (as detailed before) to configure the embedded Tomcat/Jetty/Undertow to listen on port 443 (or your desired HTTPS port).
+It configures SNI within the customizer, providing the abc.com certificate for requests to abc.com and the xyz.com certificate for requests to xyz.com.
+It does not contain the business logic of your original WAR.
+It includes an HTTP client (like Spring's WebClient or Apache HttpClient).
+It has a catch-all request mapping (@RequestMapping("/**")). When a request comes in (after SSL termination):
+It constructs a new HTTP/S request targeting the original application.
+It forwards the incoming request's method, headers (importantly, Host, potentially adding X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host), and body to the original application.
+It streams the response (status, headers, body) from the original application back to the client.
+Original WAR Application (Separate Process):
+You start your unmodified original.war using java -jar original.war.
+It needs to run on a different port, typically on localhost.
+Crucially: Can you configure (via environment variables, command-line args, or an external application.properties file that original.war might read) original.war to:
+Option A (Preferred): Listen on an HTTP port (e.g., localhost:8080)? This simplifies the proxying logic in the wrapper.
+Option B (If A is impossible): Listen on its usual HTTPS port (e.g., localhost:8443) using its old combined certificate? The wrapper will then need to make an HTTPS client call, potentially configured to trust the specific certificate used by original.war.
+Deployment/Startup:
+You would need a script or process manager (like systemd) that:
+Starts the original.war process (e.g., java -jar /path/to/original.war --server.port=8080 or similar).
+Starts the sni-wrapper.jar process (e.g., java -jar /path/to/sni-wrapper.jar --original.app.url=http://localhost:8080).
+Pros:
+Avoids Classloader Conflicts: The wrapper and original application run in separate JVM processes, completely isolating their dependencies. This is the biggest advantage over the internal deployment idea.
+No WAR Modification: Satisfies the core constraint.
+SNI Handled: The wrapper handles the SNI certificate selection.
+Cons:
+Two Processes: Although potentially started from one script/deploy action, it still requires two running JVM processes, consuming more memory/CPU than a single process.
+Proxying Complexity: Implementing the proxying logic correctly (handling all headers, methods, streaming large bodies, timeouts) requires careful implementation in the wrapper. Frameworks like Spring Cloud Gateway could be used within the wrapper to simplify this, but add their own dependencies.
+Network Hop: Adds a localhost network hop for every request, introducing minor latency.
+Startup Orchestration: Requires managing the startup order and configuration of two processes.
+Configuration: Needs a way to tell the wrapper where the original application is running.
+Implementation Sketch (Wrapper Controller):
+
+// In SNI-Wrapper Application
+@RestController
+public class ProxyController {
+
+    private final WebClient webClient;
+
+    // Inject base URL of the original application (e.g., http://localhost:8080)
+    public ProxyController(@Value("${original.app.url}") String originalAppUrl) {
+        this.webClient = WebClient.builder().baseUrl(originalAppUrl).build();
+    }
+
+    @RequestMapping("/**")
+    public Mono<ResponseEntity<byte[]>> proxy(ProxyExchange<byte[]> proxy) {
+        // Forward the request path, method, headers, body
+        // proxy.uri() already contains the full path + query string
+        return proxy.forward()
+                    // You might need to explicitly copy headers here
+                    // if the default forward() doesn't do exactly what you need,
+                    // especially Host, X-Forwarded-*
+                    .exchange();
+        // NOTE: Using Spring Cloud Gateway's ProxyExchange simplifies this a lot.
+        // Doing it manually with WebClient requires more code to copy
+        // everything accurately (method, headers, body request/response).
+    }
+
+     // ---- If NOT using Spring Cloud Gateway (more manual with WebClient) ----
+     /*
+     @RequestMapping("/**")
+     public Mono<ResponseEntity<byte[]>> manualProxy(ServerHttpRequest request, ServerHttpResponse response) {
+         String path = request.getURI().getPath();
+         String query = request.getURI().getQuery();
+         String fullPath = path + (query != null ? "?" + query : "");
+
+         return webClient.method(request.getMethod())
+                 .uri(fullPath)
+                 .headers(headers -> headers.addAll(request.getHeaders())) // Copy headers
+                 // Handle request body
+                 .body(request.getBody(), DataBuffer.class) // Stream body if applicable
+                 .exchangeToMono(clientResponse -> {
+                     response.setStatusCode(clientResponse.statusCode());
+                     response.getHeaders().addAll(clientResponse.headers().asHttpHeaders());
+                     return clientResponse.bodyToMono(byte[].class)
+                             .doOnNext(body -> response.writeWith(Mono.just(response.bufferFactory().wrap(body))))
+                             .then();
+                 });
+     }
+     */
+}
+content_copy
+download
+Use code with caution.
+Java
+Why other options are likely unsuitable:
+
+Internal WAR Deployment (Original Idea): As discussed, extremely high risk of classloader conflicts. Avoid.
+Low-level Java SSLEngine: Possible to intercept connections before the embedded container, do SNI with SSLEngine, then pass off? Yes, but astronomically complex, requires deep NIO and TLS knowledge, essentially rewriting parts of a connector. Not practical.
+Conclusion:
+
+Given your rigid constraints, the "In-Process Proxy" using a separate Spring Boot wrapper application (Option 1 above) is the least bad option. It avoids the fatal classloader issues of internal deployment by keeping the applications in separate processes. However, be aware that it still involves running two processes and requires careful implementation of the proxying logic and startup orchestration.
+
+Before committing to this, carefully weigh its complexity and resource usage against slightly relaxing the constraints (e.g., allowing an external Nginx container, which is often very lightweight and efficient, or allowing deployment to a pre-configured standalone Tomcat).
