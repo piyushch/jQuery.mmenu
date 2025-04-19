@@ -1,0 +1,62 @@
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.jvnet.jaxb</groupId>
+            <artifactId>jaxb-maven-plugin</artifactId>
+            <version>4.0.5</version> <!-- Use a recent 4.x version -->
+            <executions>
+                <execution>
+                    <id>generate</id> <!-- Your execution ID -->
+                    <goals>
+                        <goal>generate</goal>
+                    </goals>
+                    <configuration>
+                        <!-- Keep your existing configuration like schema paths, etc. -->
+                        <schemaDirectory>${project.basedir}/src/main/resources/schemas</schemaDirectory>
+                        <bindingDirectory>${project.basedir}/src/bindings</bindingDirectory> <!-- Your binding dir -->
+                        <bindingIncludes>
+                            <include>binding.xjb</include>
+                        </bindingIncludes>
+                        <generateDirectory>${project.build.directory}/generated-sources/jaxb</generateDirectory>
+                        <generatePackage>com.yourcompany.yourpackage.jaxb</generatePackage> <!-- Adjust package -->
+                        <clearOutputDir>false</clearOutputDir>
+                        <!-- Force Jakarta EE mode if needed, often default in v4+ -->
+                        <specVersion>3.0</specVersion> <!-- or 4.0, aligns with Jakarta -->
+
+                        <!-- IMPORTANT: Add dependencies needed by the plugin itself -->
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.glassfish.jaxb</groupId>
+                                <artifactId>jaxb-runtime</artifactId>
+                                <version>4.0.5</version> <!-- Match JAXB RI version -->
+                            </dependency>
+                            <dependency>
+                                <groupId>org.glassfish.jaxb</groupId>
+                                <artifactId>jaxb-xjc</artifactId>
+                                <version>4.0.5</version> <!-- Match JAXB RI version -->
+                             </dependency>
+                        </dependencies>
+                    </configuration>
+                </execution>
+            </executions>
+        </plugin>
+        <!-- Other plugins -->
+    </plugins>
+</build>
+
+<!-- Add JAXB API and Runtime Dependencies for your project -->
+<dependencies>
+    <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <!-- Version managed by Spring Boot BOM usually -->
+    </dependency>
+    <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <!-- Version managed by Spring Boot BOM usually, or specify explicitly -->
+        <scope>runtime</scope> <!-- Often needed only at runtime -->
+    </dependency>
+
+    <!-- Other Spring Boot / project dependencies -->
+</dependencies>
